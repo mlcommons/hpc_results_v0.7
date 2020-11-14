@@ -1,0 +1,65 @@
+FROM nvidia/cuda:10.1-devel-ubuntu18.04
+
+# Define the software versions
+ENV MPICH_VERSION=3.1.4 \
+    HOROVOD_VERSION=0.19.1 \
+    TENSORFLOW_VERSION=2.2.0 \
+    CUDNN_VERSION=7.6.4.38-1+cuda10.1 \
+    NCCL_VERSION=2.6.4-1+cuda10.1
+
+# Python version
+ARG python=3.8
+ENV PYTHON_VERSION=${python}
+
+# Install the necessary packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    --allow-downgrades  --allow-change-held-packages \
+    cmake git curl vim wget ca-certificates \
+    libibverbs-dev \
+    libcudnn7=${CUDNN_VERSION} \
+    libnccl2=${NCCL_VERSION} \
+    libnccl-dev=${NCCL_VERSION} \
+    libjpeg-dev \
+    libpng-dev \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-dev \
+    python${PYTHON_VERSION}-distutils
+    
+
+# Create symbolic link in order to make the installed python default
+RUN ln -s /usr/bin/python${PYTHON_VERSION} /usr/bin/python
+
+# Download pip bootstrap script and install pip
+RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
+    python get-pip.py && \
+    rm get-pip.py
+
+# Install MPICH 3.1.4
+RUN cd /tmp \
+    && wget -q http://www.mpich.org/static/downloads/${MPICH_VERSION}/mpich-${MPICH_VERSION}.tar.gz \
+    && tar xf mpich-${MPICH_VERSION}.tar.gz \
+    && cd mpich-${MPICH_VERSION} \
+    && ./configure --disable-fortran --enable-fast=all,O3 --prefix=/usr \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && cd .. \
+    && rm -rf mpich-${MPICH_VERSION} \
+    && rm -f mpich-${MPICH_VERSION}.tar.gz \
+    && cd /
+
+# Install Tensorflow, Keras and h5py
+RUN pip install tensorflow-gpu==${TENSORFLOW_VERSION} keras h5py ipython pandas pyyaml
+
+# Install Horovod
+RUN ldconfig /usr/local/cuda-10.1/targets/x86_64-linux/lib/stubs && \
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITH_TENSORFLOW=1 pip install --no-cache-dir horovod==${HOROVOD_VERSION} && \
+    ldconfig
+
+# NCCL configuration
+RUN echo NCCL_DEBUG=INFO >> /etc/nccl.conf && \
+    echo NCCL_IB_HCA=ipogif0 >> /etc/nccl.conf && \
+    echo NCCL_IB_CUDA_SUPPORT=1 >> /etc/nccl.conf
+
+RUN pip install "git+https://github.com/mlperf-hpc/logging.git@hpc-0.5.0"

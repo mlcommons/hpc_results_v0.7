@@ -1,0 +1,42 @@
+# This file is the body to submit training job.
+# Modify this.
+
+echo "`date +%s.%N` #script start at `date`"
+
+Exec(){
+    echo "$@"
+    "$@"
+}
+
+### The number of total processes
+NumProc=`expr 4 \* $NHOSTS`
+
+### Copy bind script to log directory
+ScriptDir="$COSMOFLOW_DIR"
+Bind="$ScriptDir/ompi_bind_4gpu.sh"
+cp ${Bind} ${LogDir}/
+
+### Create hostfile
+sed -e 's/$/ slots=4/' ${Hostfile:-$SGE_JOB_HOSTLIST} > "$LogDir/hostfile"
+cp "$LogDir/parameters" "$LogDir/parameters_$ii"
+sed -i -e 's|$LOGDIR|'"$LogDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|$DataDir|'"$DataDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|$LocalDataDir|'"$LocalDataDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|_SEED_|'"$RANDOM|" "$LogDir/parameters_$ii"
+sed -i -e 's|$ConfigYaml|'"$LogDir/$ConfigYaml|" "$LogDir/parameters_$ii"
+sed -i -e 's|$TrainStagingDupFactor|'"$TrainStagingDupFactor|" "$LogDir/parameters_$ii"
+. "$LogDir/parameters_$ii"
+
+### Train 
+# PARAMS[@] are defined in the file "parameters".
+echo "`date +%s.%N` #mpirun"
+Exec mpirun -n ${NumProc} --mca btl openib -mca pml ob1 \
+    -mca mpi_warn_on_fork 0 \
+    --hostfile ${LogDir}/hostfile \
+    -x LD_PRELOAD=${OMPI_HOME}/lib/libmpi.so \
+    -x ParameterFile="$LogDir/parameters_$ii" \
+    -x LOGDIR=${LogDir} \
+    ${Bind} | tee "$LogDir/result_$ii.txt"
+echo "`date +%s.%N` #finished at `date`"
+
+# End of file

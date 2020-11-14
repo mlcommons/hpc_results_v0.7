@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#module load lang/tcsds-1.2.27b
+MPI_HOME=/opt/FJSVxtclanga/tcsds-1.2.27
+MY_MPI=/var/crash/LPMPI-02/no-tofu-congestion/opt/FJSVxtclanga/.common/MECA020
+MY_TOFU=/var/crash/LPMPI-02/no-tofu-congestion/usr
+PATH=${MY_MPI}/bin:$MPI_HOME/bin:$PATH
+LD_LIBRARY_PATH=${MY_MPI}/lib64:${MY_TOFU}/lib64:$MPI_HOME/lib64:$LD_LIBRARY_PATH
+OPAL_PREFIX=${MY_MPI}
+export PATH LD_LIBRARY_PATH OPAL_PREFIX
+
+
+#export COSMOFLOW_BASE=${HOME}/COSMOFLOW_27b
+export COSMOFLOW_BASE=${HOME}/cosmoflow/fugakucosmoflow
+
+export ONEDNN_DIR=${OPT_PATH}/oneDNN-build
+export FCCPYTHON=${OPT_PATH}/python-3.8.5
+export HDF5_DIR=${OPT_PATH}/hdf5-1.10.7
+export XED_ROOT_DIR=${OPT_PATH}/xed_aarch64/kits/xed
+#export UNWIND_DIR=${OPT_PATH}/libunwind-1.3.2
+
+LD_LIBRARY_PATH=${FCCPYTHON}/lib:${ONEDNN_DIR}/src:${HDF5_DIR}/lib:${XED_ROOT_DIR}/lib:${UNWIND_DIR}/lib:${LD_LIBRARY_PATH}
+export INCLUDE=${HDF5_DIR}/include:${XED_ROOT_DIR}/include:${FCCPYTHON}/include:${UNWIND_DIR}/include:${INCLUDE}
+export CPATH=${HDF5_DIR}/include:${XED_ROOT_DIR}/include:${FCCPYTHON}/include:${UNWIND_DIR}/include:${CPATH}
+export PATH=${HDF5_DIR}/bin:${XED_ROOT_DIR}/bin:${FCCPYTHON}/bin:${PATH}
+
+# for scipy install
+#export LAPACK=/opt/FJSVxtclanga/tcsds-1.2.26b/lib64/libfjlapack.so
+#export BLAS=${LAPACK}
+
+export CC="fcc -Nclang -Kfast -Knolargepage -Kopenmp"
+export CXX="FCC -Nclang -Kfast -Knolargepage -Kopenmp"

@@ -1,0 +1,7 @@
+__dummy__
+
+cp -r old_COSMOFLOW/setup/bazel_2.0.0 COSMOFLOW/setup/
+cp old_COSMOFLOW/setup/hdf5-1.10.7.tar.gz COSMOFLOW/setup/
+cp old_COSMOFLOW/setup/grpc.tgz COSMOFLOW/setup/
+cp old_COSMOFLOW/setup/cmake-3.18.2.tar.gz COSMOFLOW/setup/
+

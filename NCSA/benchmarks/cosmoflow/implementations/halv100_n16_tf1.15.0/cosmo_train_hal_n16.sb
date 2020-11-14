@@ -1,0 +1,24 @@
+#!/bin/bash
+#SBATCH --job-name="cosmo-n16-001"
+#SBATCH --output="cosmo-n16-001.%j.%N.out"
+#SBATCH --partition=gpu
+#SBATCH --time=160:00:00
+#SBATCH --nodes=16
+#SBATCH --ntasks-per-node=4
+#SBATCH --cpus-per-task=32
+#SBATCH --sockets-per-node=2
+#SBATCH --cores-per-socket=20
+#SBATCH --threads-per-core=4
+#SBATCH --mem-per-cpu=1200
+#SBATCH --export=ALL
+#SBATCH --gres=gpu:v100:4
+#SBATCH --reservation=root_3
+
+module purge
+export LD_LIBRARY_PATH=/usr/local/cuda-10.1/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+module load cuda/10.1.243
+module load customized/hvd-tf115-mlperf
+module load openmpi
+module list
+
+mpirun -n 64 --allow-run-as-root python /home/dmu/mlperf/cosmoflow-benchmark-dry/train.py -d --rank-gpu /home/dmu/mlperf/cosmoflow-benchmark-dry/hal/cosmo_n16_001.yaml

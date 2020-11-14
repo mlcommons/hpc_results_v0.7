@@ -1,0 +1,65 @@
+# Parameter file
+
+test -z "$OMPI_COMM_WORLD_RANK" && OMPI_COMM_WORLD_RANK=0
+
+PARAMS=(
+    # config file. Don't remove!
+    $ConfigYaml
+
+    --seed 4
+    #--target-mae 0.124
+
+    # don't change
+    -v
+    --rank-gpu
+    -d
+
+    # for data
+    --data-dir $DataDir
+    # auto mixed precision
+    # --mixed_precision
+    # for staged data
+    --stage-dir $LocalDataDir
+    # batch size for validation
+    --validation-batch-size 4
+    # duplicated staging
+    --train-staging-dup-factor $TrainStagingDupFactor
+    --output-dir $LOGDIR
+#    --prestaged
+)
+
+# Set a value larger than 0 for GPU profile data.
+# The value is used to sampling, say, if UseProf=105 and NumMPIProc=1080,
+# the profiles of 1080 / 105 = 10 processes are recorded.
+# UseProf=33 # sampling rate 1 / 33
+    UseProf=0 # stop profiling
+
+# for NCCL params
+    # export NCCL_BUFFSIZE=2097152      # default: 4194304 (4MB)
+    # export NCCL_LL_THRESHOLD=1024     # default: dependent on the # of ranks
+    # export NCCL_MAX_NRINGS=16
+    # export NCCL_MIN_NRINGS=4
+    # export NCCL_NET_GDR_READ=1
+    # export NCCL_IB_SL=3
+    # export NCCL_DEBUG=INFO
+
+# HOROVOD params
+    # export HOROVOD_THREAD_AFFINITY    # set thread affinity 
+    # export HOROVOD_NUM_NCCL_STREAMS=2 # num of cuda streams for nccl
+    # export HOROVOD_TIMELINE=1         # open the timeline file on coordinator
+    # export HOROVOD_FUSION_THRESHOLD=67108864 # default: 64MB
+    # export HOROVOD_CYCLE_TIME=5       # default: 5(ms)
+    # export HOROVOD_CACHE_CAPACITY=0   # control response cache capacity
+    # export HOROVOD_HIERARCHICAL_ALLGATHER
+    # export HOROVOD_HIERARCHICAL_ALLREDUCE
+    ###
+    #export HOROVOD_AUTOTUNE=1
+    #export HOROVOD_AUTOTUNE_LOG=$LOGDIR/horovod_autotune.log
+    #export HOROVOD_CACHE_CAPACITY=1024   # control response cache capacity
+    # export HOROVOD_ADASUM_MPI_CHUNK_SIZE # Set chunk size for MPI based Adasum allreduce algorithms
+
+# Deterministic
+    # export TF_DETERMINISTIC_OPS=1
+    # export HOROVOD_FUSION_THRESHOLD=0
+
+# End of file

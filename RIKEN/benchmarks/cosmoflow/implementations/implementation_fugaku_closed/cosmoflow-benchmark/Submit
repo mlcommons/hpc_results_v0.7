@@ -1,0 +1,192 @@
+#!/bin/bash
+LANG=
+
+#set -ex
+
+echo "`date +%s.%N` #Submit at `date`"
+
+if [ $# -lt 1 ] ; then
+    cat << EOF >&2
+usage: $0 numNodes timeLimit
+When numNodes is larger than 0 (zero), the job is executed using mpiexec.
+Otherwise, the job is executed directlry.
+Each node has 4 processes and uses 4 GPUs.
+The timeLimit is the maximum of execution time with the format hh:mm:ss.
+EOF
+    exit 1
+fi
+
+
+### Parameters
+UseDefinedHosts=1
+dnnlverbose=0
+
+# The directory where data is stored
+#DataDir="/data/g9300001/MLPerf/cosmoUniverse_2019_05_4parE_tf"
+#DataDir="/data/g9300001/MLPerf/cosmoUniverse_64each_gz"
+#DataDir="/home/g9300001/u93182/COSMOFLOW_27b/data_mini"
+#DataDir="/data/g9300001/MLPerf/cosmoUniverse_8192_tarfiles_gz"
+DataDir="cosmoUniverse_8192_tarfiles_xz"
+
+# Copy flag and directory path 
+#   copy data from remote storage to local disk
+#   and use the training data in local disk
+UseLocalStorage=1
+LocalDataDir="/local/${USER}"
+
+#
+RSC_GRP=dvsys-huge1
+
+# Config YAML File (test run)
+#ConfigYaml="configs/cosmo_mini.yaml"
+#ConfigYaml="configs/cosmo_closed_128node.yaml"
+ConfigYaml="configs/cosmo_closed_batch512.yaml"
+#ConfigYaml="configs/cosmo_dummy.yaml"
+
+#### Config YAML File
+#ConfigYaml="configs/cosmo_open_batch2048.yaml"
+#ConfigYaml="configs/cosmo_open_batch4096.yaml"
+#ConfigYaml="configs/cosmo_open_batch4096_lin.yaml"
+#ConfigYaml="configs/cosmo_open_batch8192.yaml"
+
+# Duplicated staging
+TrainStagingDupFactor=1
+
+# Hostfile (if not specified, $SGE_JOB_HOSTLIST is used)
+Hostfile=""
+
+NumNodes="$1" && shift
+NodeShape="$1" && shift
+TimeLimit="$1" && shift
+### 
+
+
+
+### Create log directory
+MyDir=`readlink -f "$0" | xargs dirname`
+MyName=`basename "$0"`
+Time=`date "+%y%m%d%H%M%S"`
+HostName=`hostname | awk -F . '{ print $1; }'`
+JobName="$MyName.$Time.$HostName."`printf "%06x" $$`
+JobName2="$JobName.b"
+
+BaseFile="$MyDir/BatchBase"
+
+RecursiveMkDir(){
+    local Dir="$1"
+    local Parent=`dirname "$Dir"`
+    if [ ! -d "$Parent" ] ; then
+        RecursiveMkDir "$Parent" || return
+    fi
+    mkdir "$Dir" || return
+    chmod g+s "$Dir"
+    return
+}
+
+LogDir="$MyDir/log"/`printf "%04d" $NumNodes`/"$JobName"
+RecursiveMkDir "$LogDir" || exit
+###
+
+
+ParameterFile="$LogDir/parameters"
+cp "$MyDir/parameters" "$ParameterFile"
+
+cp $MyDir/$ConfigYaml ${LogDir}/ || exit
+
+git rev-parse HEAD 2>&1 > "$LogDir/git_hash"
+
+NumHosts=`expr "$NumNodes" + 0`
+if [ $NumHosts -lt 1 ] ; then
+    NumHosts=1
+fi
+
+if [ $UseDefinedHosts -eq 1 ] ; then
+    NShape=`echo ${NodeShape} | awk -F':' '{print $1}'`
+    python -u mapper.py ${NShape} > ${LogDir}/map_${NShape}.txt
+    test $? -eq 0 || exit
+    PJM_MAPFILE="#PJM --mpi rank-map-hostfile=${LogDir}/map_${NShape}.txt"
+else
+    PJM_MAPFILE=""
+fi
+
+### Generate qsub script
+ScriptFile="$LogDir/script"
+
+cat << EOF > "$ScriptFile"
+#!/bin/bash
+#PJM -L "rscunit=rscunit_ft01,rscgrp=${RSC_GRP}"
+#PJM -L elapse=$TimeLimit
+#PJM -L proc-core=48
+#PJM -L "node=${NodeShape},freq=2200"
+#PJM --mpi "max-proc-per-node=1"
+#PJM -j
+#PJM -S
+${PJM_MAPFILE}
+
+hostname
+export COSMOFLOW_DIR="$MyDir"
+
+. "$MyDir/setenv_tmp"
+
+NumNodes=$NumNodes
+
+LogDir="$LogDir"
+if [ ! -d "\$LogDir" ] ; then
+    echo "\$LogDir: not a directory" >&2
+    exit 1
+fi
+
+printenv > "$LogDir/environ"
+
+### The directory where data is stored
+DataDir="$DataDir"
+
+dnnlverbose=$dnnlverbose
+echo "DNNL Verbose Level: $dnnlverbose"
+
+###
+# Copy flag and directory path 
+#   copy data from remote storage to local disk
+#   and use the training data in local disk
+UseLocalStorage=${UseLocalStorage}
+LocalDataDir=${LocalDataDir}
+TmpDataDir=${DataDir}
+
+### The config yaml file
+ConfigYaml=$(basename ${ConfigYaml})
+
+### Duplicated staging
+TrainStagingDupFactor=${TrainStagingDupFactor}
+
+### Hostfile
+Hostfile=${Hostfile}
+
+EOF
+
+cat $BaseFile >> "$ScriptFile"
+
+echo ---------------
+echo Job information
+echo ---------------
+echo Mode: MPI
+echo NumNodes: $NumNodes
+echo NodeShape: $NodeShape
+echo LogDir: $LogDir
+
+if [[ `hostname` =~ fn01sv0[0-9] ]] ; then
+    # To use LLIO (node-temporary)
+    QsubArgs+=("--llio localtmp-size=92160Mi")
+
+    QsubArgs+=("$ScriptFile")
+    ###
+
+    ### Execute qsub command
+    echo "`date +%s.%N` #qsub"
+    echo "> pjsub ${QsubArgs[@]}"
+    pjsub ${QsubArgs[@]}
+else
+    # On compute node
+    bash $ScriptFile 2>&1 | tee ${LogDir}/stdout.txt
+fi
+# End of file
+

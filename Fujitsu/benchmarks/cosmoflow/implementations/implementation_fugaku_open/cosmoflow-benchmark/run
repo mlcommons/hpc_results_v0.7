@@ -1,0 +1,95 @@
+#!/bin/bash
+#PJM -L "rscunit=rscunit_ft01,rscgrp=dvsys-huge"
+#PJM -L elapse=00:30:00
+#PJM -L proc-core=48
+#PJM -L "node=16x8x8:strict"
+#PJM --mpi "max-proc-per-node=1"
+#PJM -j
+#PJM -S
+
+set -ex
+
+LANG=
+echo "`date +%s.%N` #script start at `date`"
+
+. ../setenv
+
+NumNodes=${PJM_MPI_PROC}
+dnnlverbose=0
+
+export COSMOFLOW_DIR="$PWD"
+# The directory where data is stored
+DataDir="/data/g9300001/MLPerf/cosmoUniverse_2019_05_4parE_tf"
+#ConfigYaml="cosmo_mini.yaml"
+ConfigYaml="cosmo.yaml"
+
+### The number of total processes
+#number of processes per node
+
+MyName=`basename "$0"`
+Time=`date "+%y%m%d%H%M%S"`
+HostName=`hostname | awk -F . '{ print $1; }'`
+JobName="$MyName.$Time.$HostName."`printf "%06x" $$`
+
+RecursiveMkDir(){
+    local Dir="$1"
+    local Parent=`dirname "$Dir"`
+    if [ ! -d "$Parent" ] ; then
+        RecursiveMkDir "$Parent" || return
+    fi
+    mkdir "$Dir" || return
+    chgrp "$GroupID" "$Dir"
+    chmod g+s "$Dir"
+    return
+}
+
+LogDir="${PWD}/log"/`printf "%04d" $NumNodes`/"$JobName"
+RecursiveMkDir "$LogDir" || exit
+
+ParameterFile="$LogDir/parameters"
+cp "$PWD/parameters" "$ParameterFile"
+
+cp $PWD/configs/$ConfigYaml ${LogDir}/
+
+git rev-parse HEAD 2>&1 > "$LogDir/git_hash"
+
+NumHosts=`expr "$NumNodes" + 0`
+if [ $NumHosts -lt 1 ] ; then
+    NumHosts=1
+fi
+
+### Copy bind script to log directory
+Bind="${COSMOFLOW_DIR}/ompi_bind.sh"
+cp ${Bind} ${LogDir}/
+
+ii="host"
+### Create hostfile
+#sed -e 's/$/ slots=4/' ${Hostfile:-$SGE_JOB_HOSTLIST} > "$LogDir/hostfile"
+cp hostfile $LogDir/
+cp "$LogDir/parameters" "$LogDir/parameters_$ii"
+sed -i -e 's|$LOGDIR|'"$LogDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|$DataDir|'"$DataDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|$LocalDataDir|'"$LocalDataDir|" "$LogDir/parameters_$ii"
+sed -i -e 's|_SEED_|'"$RANDOM|" "$LogDir/parameters_$ii"
+sed -i -e 's|$ConfigYaml|'"$LogDir/$ConfigYaml|" "$LogDir/parameters_$ii"
+sed -i -e 's|$TrainStagingDupFactor|'"$TrainStagingDupFactor|" "$LogDir/parameters_$ii"
+. "$LogDir/parameters_$ii"
+
+### Train 
+# PARAMS[@] are defined in the file "parameters".
+echo "`date +%s.%N` #mpirun"
+#mpirun -n ${NumNodes} --mca btl openib -mca pml ob1 \
+#	--report-bindings \
+mpiexec -np ${NumNodes} \
+    --mca mpi_print_stats 1 --mca mpi_abort_print_stack 1 --mca orte_abort_print_stack 1 --of-proc std/out \
+    -x ParameterFile="$LogDir/parameters_$ii" \
+    -x LOGDIR=${LogDir} \
+    -x dnnlverbose=${dnnlverbose} \
+    ${Bind}
+
+#| tee "$LogDir/result_$ii.txt"
+#    -mca mpi_warn_on_fork 0 \
+#    --hostfile ${LogDir}/hostfile \
+echo "`date +%s.%N` #finished at `date`"
+
+# End of file

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+deactivate 2>/dev/null
+
+source /etc/profile.d/modules.sh
+
+module purge
+module load gcc/7.4.0 python/3.7/3.7.6 cuda/10.1/10.1.243
+module load cudnn/7.6/7.6.5 nccl/2.6/2.6.4-1 openmpi/2.1.6
+
+PYTHON_VENV="$HOME/CosmoFlow/venv_cuda10.1_cudnn7.6.5_tf2.2.0" # set your python venv directory
+#PYTHON_VENV="${HOME}/venv-tf2"
+
+## python-venv activate
+. "${VIRTUAL_ENV:-${PYTHON_VENV}}/bin/activate"
+
+export NCCL_ROOT=${NCCL_ROOT_DIR}
+
+# End of file

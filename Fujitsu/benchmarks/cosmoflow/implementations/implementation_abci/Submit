@@ -1,0 +1,182 @@
+#!/bin/bash
+LANG=
+
+echo "`date +%s.%N` #Submit at `date`"
+
+if [ $# -lt 1 ] ; then
+    cat << EOF >&2
+usage: $0 numNodes timeLimit
+When numNodes is larger than 0 (zero), the job is executed using mpiexec.
+Otherwise, the job is executed directlry.
+Each node has 4 processes and uses 4 GPUs.
+The timeLimit is the maximum of execution time with the format hh:mm:ss.
+EOF
+    exit 1
+fi
+
+
+### Parameters
+GroupID=gca50115   # Set your group ID
+UseDefinedHosts=0
+
+# The directory where data is stored
+DataDir="/bb/gac50489/datasets/cosmoflow_full/cosmoUniverse_2019_05_4parE_tf/tar_xz_64"
+
+# Copy flag and directory path 
+#   copy data from remote storage to local disk
+#   and use the training data in local disk
+UseLocalStorage=1
+LocalDataDir="/dev/shm"
+
+# Config YAML File
+ConfigYaml="configs/cosmo_open_1024node.yaml"
+
+# Duplicated staging
+TrainStagingDupFactor=1
+
+# Hostfile (if not specified, $SGE_JOB_HOSTLIST is used)
+Hostfile=""
+
+NumNodes="$1" && shift
+TimeLimit="$1" && shift
+### 
+
+
+if [ $UseDefinedHosts -eq 1 ] ; then
+    #HostToUse=`./sethost.sh $NumNodes`
+    #HostToUse="g0[234589]*"
+    #HostToUse="g0[01245789][0-9][0-9]|g061[0-8]|g06[02346789][0-9]"
+    #HostToUse="g054[56789]|g05[59][0-9]|g06[0-9][0-9]|g07[0-4][0-9]|g075[023456789]|g07[6-9][0-9]|g08[0-9][0-9]|g09[0-9][0-9]|g100[0-9]|g101[012356789]|g10[2-7][0-9]|g108[012345678]" # 2nd half 512nodes
+
+    #HostToUse="g000[1-9]|g00[1-3][0-9]|g004[2-9]|g00[5-6][0-9]|g007[2-9]|g00[8-9][0-9]|g010[0-9]|g011[2-9]|g01[2-3][0-9]|g014[2-9]|g01[5-6][0-9]|g017[2-9]|g01[8-9][0-9]|g020[0-9]|g021[2-9]|g02[2-3][0-9]|g024[2-9]|g02[5-7][0-9]|g028[2-9]|g029[0-9]|g030[0-9]|g031[2-9]|g03[2-3][0-9]|g034[2-9]|g03[5-7][0-9]|g038[2-9]|g039[0-9]|g040[0-9]|g041[2-9]|g04[2-4][0-9]|g045[2-9]|g04[6-7][0-9]|g048[2-9]|g049[0-9]|g050[0-9]|g051[2-9]|g05[2-4][0-9]|g055[2-9]|g05[6-7][0-9]|g058[2-9]|g059[0-9]|g06[0-1][0-9]|g062[2-9]|g06[3-4][0-9]|g065[2-9]|g06[6-7][0-9]|g068[2-9]|g069[0-9]|g07[0-1][0-9]|g072[2-9]|g07[3-4][0-9]|g075[3-9]|g07[6-8][0-9]|g079[1-9]|g08[0-1][0-9]|g082[2-9]|g08[3-4][0-9]|g085[2-9]|g08[6-8][0-9]|g089[2-9]|g09[0-1][0-9]|g092[2-9]|g09[3-5][0-9]|g096[2-9]|g09[7-8][0-9]|g099[2-9]|g10[0-1][0-9]|g102[2-9]|g10[3-5][0-9]|g106[2-9]|g107[0-9]|g108[0-6]" # 1024nodes
+    #HostToUse="g000[1-9]|g00[1-9][0-9]|g0[1-6][0-9][0-9]|g07[0-4][0-9]|g0750|g075[2-9]|g07[6-9][0-9]|g0[89][0-9][0-9]|g100[0-9]|g101[0-3]|g101[5-9]|g102[0-7]" # 1024 node
+    HostToUse="g000[1-9]|g00[1-3][0-9]|g004[2-9]|g00[5-6][0-9]|g007[2-9]|g00[8-9][0-9]|g010[0-9]|g011[2-9]|g01[2-3][0-9]|g014[2-9]|g01[5-6][0-9]|g017[2-9]|g01[8-9][0-9]|g020[0-9]|g021[2-9]|g02[2-3][0-9]|g024[2-9]|g02[5-7][0-9]|g028[2-9]|g029[0-9]|g030[0-9]|g031[2-9]|g03[2-3][0-9]|g034[2-9]|g03[5-7][0-9]|g038[2-9]|g039[0-9]|g040[0-9]|g041[2-9]|g04[2-4][0-9]|g045[2-9]|g04[6-7][0-9]|g048[2-9]|g049[0-9]|g050[0-9]|g051[2-9]|g05[2-3][0-9]|g054[0-2]" # 512 node
+
+    test $? -eq 0 || exit
+fi
+
+### Create log directory
+MyDir=`readlink -f "$0" | xargs dirname`
+MyName=`basename "$0"`
+Time=`date "+%y%m%d%H%M%S"`
+HostName=`hostname | awk -F . '{ print $1; }'`
+JobName="$MyName.$Time.$HostName."`printf "%06x" $$`
+JobName2="$JobName.b"
+
+BaseFile="$MyDir/BatchBase"
+
+RecursiveMkDir(){
+    local Dir="$1"
+    local Parent=`dirname "$Dir"`
+    if [ ! -d "$Parent" ] ; then
+        RecursiveMkDir "$Parent" || return
+    fi
+    mkdir "$Dir" || return
+    chgrp "$GroupID" "$Dir"
+    chmod g+s "$Dir"
+    return
+}
+
+LogDir="$MyDir/log"/`printf "%04d" $NumNodes`/"$JobName"
+RecursiveMkDir "$LogDir" || exit
+###
+
+ParameterFile="$LogDir/parameters"
+cp "$MyDir/parameters" "$ParameterFile"
+
+cp $MyDir/$ConfigYaml ${LogDir}/
+
+git rev-parse HEAD 2>&1 > "$LogDir/git_hash"
+
+NumHosts=`expr "$NumNodes" + 0`
+if [ $NumHosts -lt 1 ] ; then
+    NumHosts=1
+fi
+
+### Generate qsub script
+ScriptFile="$LogDir/script"
+
+cat << EOF > "$ScriptFile"
+#!/bin/bash
+
+#$ -l rt_F=$NumHosts
+#$ -l h_rt=$TimeLimit
+#$ -j n
+#$ -o $LogDir/stdout.txt
+#$ -e $LogDir/stderr.txt
+#$ -cwd
+
+export VIRTUAL_ENV="$VIRTUAL_ENV"
+export COSMOFLOW_DIR="$MyDir"
+
+. "$MyDir/setenv"
+
+if [ "\$NHOSTS" != $NumHosts ] ; then
+    echo "\$0: inconsistent number of nodes" >&2
+    exit 1
+fi
+
+LogDir="$LogDir"
+if [ ! -d "\$LogDir" ] ; then
+    echo "\$LogDir: not a directory" >&2
+    exit 1
+fi
+
+printenv > "$LogDir/environ"
+
+if [ ! -d "\$SGE_LOCALDIR" ] ; then
+    echo "\$SGE_LOCALDIR: not a directory" >&2
+    exit 1
+fi
+
+### The directory where data is stored
+DataDir="$DataDir"
+
+###
+# Copy flag and directory path 
+#   copy data from remote storage to local disk
+#   and use the training data in local disk
+UseLocalStorage=${UseLocalStorage}
+LocalDataDir=${LocalDataDir}
+TmpDataDir=${DataDir}
+
+### The config yaml file
+ConfigYaml=$(basename ${ConfigYaml})
+
+### Duplicated staging
+TrainStagingDupFactor=${TrainStagingDupFactor}
+
+### Hostfile
+Hostfile=${Hostfile}
+
+EOF
+
+cat $BaseFile >> "$ScriptFile"
+chgrp "$GroupID" "$ScriptFile"
+
+echo ---------------
+echo Job information
+echo ---------------
+echo Mode: MPI
+echo NumNodes: $NumNodes
+echo LogDir: $LogDir
+
+if [[ `hostname` =~ es[0-9].abci.local ]] ; then
+    # On login node
+    QsubArgs=(-g "$GroupID")
+    #QsubArgs+=(-ar 2043)
+    test $UseDefinedHosts -eq 1 && QsubArgs+=(-l "hostname=$HostToUse")
+
+    QsubArgs+=("$ScriptFile")
+    ###
+
+    ### Execute qsub command
+    echo "`date +%s.%N` #qsub"
+    echo "> qsub ${QsubArgs[@]}"
+    qsub ${QsubArgs[@]}
+else
+    # On compute node
+    bash $ScriptFile 2>&1 | tee ${LogDir}/stdout.txt
+fi
+# End of file
+

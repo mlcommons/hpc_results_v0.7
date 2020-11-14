@@ -1,0 +1,22 @@
+#!/bin/bash
+
+module load lang/tcsds-1.2.27b
+
+export COSMOFLOW_BASE=${HOME}/fugakucosmoflow
+
+export ONEDNN_DIR=${COSMOFLOW_BASE}/opt/oneDNN-build
+export FCCPYTHON=${COSMOFLOW_BASE}/opt/python-3.8.5
+export HDF5_DIR=${COSMOFLOW_BASE}/opt/hdf5-1.10.7
+export XED_ROOT_DIR=${COSMOFLOW_BASE}/opt/xed_aarch64/kits/xed
+
+export LD_LIBRARY_PATH=${ONEDNN_DIR}/src:${HDF5_DIR}/lib:${XED_ROOT_DIR}/lib:${FCCPYTHON}/lib:${LD_LIBRARY_PATH}
+export INCLUDE=${HDF5_DIR}/include:${XED_ROOT_DIR}/include:${FCCPYTHON}/include:${INCLUDE}
+export CPATH=${HDF5_DIR}/include:${XED_ROOT_DIR}/include:${FCCPYTHON}/include:${CPATH}
+export PATH=${HDF5_DIR}/bin:${XED_ROOT_DIR}/bin:${FCCPYTHON}/bin:${PATH}
+
+# for scipy install
+#export LAPACK=/opt/FJSVxtclanga/tcsds-1.2.26b/lib64/libfjlapack.so
+#export BLAS=${LAPACK}
+
+export CC="fcc -Nclang -Kfast -Knolargepage -Kopenmp"
+export CXX="FCC -Nclang -Kfast -Knolargepage -Kopenmp"
