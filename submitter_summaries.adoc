@@ -1,5 +1,6 @@
 = MLPerf HPC Training v0.7 Results Discussion
 
+
 The following descriptions were provided by the submitting organizations as a supplement to help the public understand the submissions and results. The statements do not reflect the opinions or views of MLCommons. 
 
 == CSCS
@@ -15,6 +16,7 @@ AI Bridging Cloud Infrastructure (ABCI) is the world's first large-scale Open AI
 == Fujitsu + RIKEN
 
 RIKEN and Fujitsu are jointly developing the world’s top-level supercomputer—the supercomputer Fugaku—capable of realizing high effective performance for a broad range of application software, with the goal of full operation in 2021 [2]. RIKEN and Fujitsu in collaboration with Fujitsu Laboratories submitted CosmoFlow results for closed division using 512 nodes and 8,192 nodes, and for open division using 16,384 nodes. The dataset was reformatted to tar.xz files for reducing data staging time and LLIO (Lightweight Layered IO Accelerator) was used to make use of temporary local file system in a process. Optimized oneAPI Deep Neural Network Library (oneDNN) was developed to exploit the performance of A64FX. Since the accuracy could not reach the target using the batch size larger than 4,096, the model parallel was introduced to apply hybrid parallelism of both data and model. Model parallel in TensorFlow was extended based on Mesh TensorFlow (MTF) so that multi processes of both data and model parallelisms are enabled. Model parallel was applied in Conv3d layers by spatial partitioning in two dimensions. The hybrid parallelism enabled scaling the number of CPUs up to 8,192 for closed division and 16,384 for open division (about 1/10 of Fugaku).  
+
 [2] https://www.fujitsu.com/global/about/innovation/fugaku/
 
 == LBNL
